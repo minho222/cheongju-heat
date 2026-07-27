@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>청주 폭염·온열질환 모니터</title>
+<style>
+  :root{
+    --bg:#FAFBFA; --panel:#FFFFFF; --panel-2:#F3F5F3; --ink:#141A16; --ink-2:#3D4842; --ink-soft:#6A766E;
+    --line:#E6EAE7; --line-2:#D6DCD8;
+    --ok:#1F9D54; --lv1:#D98A16; --lv2:#DE6A16; --lv3:#DB362F; --lv4:#A81813; --accent:#1F9D54;
+    --mono:"Malgun Gothic","맑은 고딕",system-ui,sans-serif;
+    --r:14px;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0B0E0D; --panel:#121614; --panel-2:#1A201D; --ink:#EAF0EC; --ink-2:#C2CCC6; --ink-soft:#8A968E;
+    --line:#232B27; --line-2:#2E3833;
+    --ok:#33C06B; --lv1:#E0A63A; --lv2:#EF7F3E; --lv3:#F04A44; --lv4:#E2504B; --accent:#33C06B;
+  }}
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55;
+    font-family:"Malgun Gothic","맑은 고딕",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  .eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* top bar */
+  .topbar{position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);background:color-mix(in srgb,var(--bg) 82%,transparent);
+    border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:13px 22px}
+  .topbar .brand{font-weight:700;font-size:14px;letter-spacing:-.01em}
+  .topbar .brand b{color:var(--accent)}
+  .topbar .sep{color:var(--line-2)}
+  .topbar .sub{color:var(--ink-soft);font-size:12.5px}
+  .topbar .clock{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);font-weight:600}
+  .topbar .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent)}70%{box-shadow:0 0 0 7px transparent}}
+
+  .wrap{max-width:960px;margin:0 auto;padding:22px 20px 70px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+
+  /* ── HERO ── */
+  .hero{padding:24px 26px 20px;position:relative;overflow:hidden;transition:background .3s,border-color .3s}
+  .hero::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--band,var(--accent));opacity:.9}
+  .hero.alert{background:color-mix(in srgb,var(--band) 7%,var(--panel));border-color:color-mix(in srgb,var(--band) 45%,var(--line))}
+  .hero-main{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+  .reading{flex:1;min-width:220px}
+  .reading .rlabel{color:var(--ink-soft)}
+  .rnum{display:flex;align-items:baseline;gap:4px;margin:2px 0}
+  .rnum #big{font-family:var(--mono);font-size:clamp(46px,8vw,66px);font-weight:700;letter-spacing:-.03em;line-height:.95;color:var(--band,var(--ink))}
+  .rnum .unit{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--band,var(--ink))}
+  .rtime{color:var(--ink-soft);font-size:12.5px;font-variant-numeric:tabular-nums}
+  .hero-status{flex:1;min-width:220px;display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding-top:6px}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:12.5px;color:#fff;background:var(--band,#888);padding:6px 13px;border-radius:999px;letter-spacing:.01em}
+  .badge .bd{width:8px;height:8px;border-radius:50%;background:#fff;opacity:.9}
+  .directive{margin:0;font-size:14.5px;font-weight:600;line-height:1.45;color:var(--ink-2)}
+  .env{display:flex;gap:8px;margin-top:2px}
+  .env span{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--panel-2);border:1px solid var(--line);padding:5px 11px;border-radius:8px}
+
+  /* ── gauge ── */
+  .gauge{margin-top:22px;position:relative;padding-top:26px}
+  .gtrack{height:10px;border-radius:6px;background:linear-gradient(90deg,
+    var(--ok) 0 25%, var(--lv1) 25% 41.67%, var(--lv2) 41.67% 58.33%, var(--lv3) 58.33% 83.33%, var(--lv4) 83.33% 100%)}
+  .gticks{position:relative;height:0}
+  .gtick{position:absolute;top:-36px;transform:translateX(-50%);text-align:center}
+  .gtick i{display:block;width:1px;height:14px;background:var(--line-2);margin:0 auto}
+  .gtick span{font-size:10.5px;color:var(--ink-soft);font-weight:700;font-variant-numeric:tabular-nums}
+  .gmark{position:absolute;top:20px;transform:translateX(-50%);transition:left .4s ease;display:none}
+  .gmark.show{display:block}
+  .gmark .pin{width:3px;height:16px;background:var(--ink);border-radius:2px;margin:0 auto}
+  .gmark .val{position:absolute;top:-30px;left:50%;transform:translateX(-50%);white-space:nowrap;
+    font-family:var(--mono);font-size:12px;font-weight:800;background:var(--ink);color:var(--bg);padding:2px 8px;border-radius:6px}
+
+  /* ── bento ── */
+  .stack{margin-top:14px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .tile{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px 15px;display:flex;flex-direction:column;gap:3px}
+  .tile .k{color:var(--ink-soft);font-size:12px}
+  .tile .v{font-family:var(--mono);font-weight:700;font-size:17px}
+  @media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .card{padding:18px 20px}
+  .card .head{display:flex;align-items:baseline;gap:8px;margin-bottom:14px}
+  .card .head .n{font-size:12px;color:var(--ink-soft);font-weight:600}
+  .act{display:flex;gap:11px;padding:11px 0;border-top:1px solid var(--line)}
+  .act:first-of-type{border-top:none;padding-top:2px}
+  .tag{flex:none;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;height:fit-content;letter-spacing:.02em}
+  .tag.law{background:color-mix(in srgb,var(--lv3) 15%,transparent);color:var(--lv3)}
+  .tag.rec{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+  .act .txt{font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+
+  /* summary stats */
+  .stat{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-top:1px solid var(--line)}
+  .stat:first-of-type{border-top:none}
+  .stat .k{color:var(--ink-soft);font-size:13px}
+  .stat .v{font-family:var(--mono);font-weight:700;font-size:15px}
+  .srcline{margin-top:12px;font-size:12px;color:var(--ink-soft);line-height:1.55}
+  .srcline b{color:var(--ink-2)}
+
+  /* law */
+  details.law{margin-top:14px;padding:16px 20px}
+  details.law summary{cursor:pointer;font-weight:800;font-size:13.5px;list-style:none;display:flex;align-items:center;gap:8px;letter-spacing:.01em}
+  details.law summary::-webkit-details-marker{display:none}
+  details.law summary::after{content:'펼치기 ▸';margin-left:auto;font-size:11px;color:var(--ink-soft);font-weight:700}
+  details.law[open] summary::after{content:'접기 ▾'}
+  .law-body{margin-top:16px;font-size:13.5px;line-height:1.65;color:var(--ink-2)}
+  .law-body h3{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin:18px 0 6px}
+  .law-body ul{margin:6px 0;padding-left:18px}.law-body li{margin:4px 0}
+  .law-body a{color:var(--accent);text-underline-offset:2px}
+  .law-body .t2{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
+  .law-body .t2 th,.law-body .t2 td{border:1px solid var(--line);padding:7px 9px;text-align:left}
+  .law-body .t2 th{background:var(--panel-2);font-weight:700;color:var(--ink)}
+  .warn{background:color-mix(in srgb,var(--lv1) 13%,transparent);border-radius:8px;padding:10px 12px;color:var(--ink-2)}
+
+  /* controls */
+  .controls{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:16px}
+  button{font:inherit;font-weight:600;font-size:13px;cursor:pointer;border-radius:10px;padding:8px 14px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink);transition:.15s}
+  button:hover{background:var(--panel-2)}
+  button.primary{background:var(--accent);color:#fff;border-color:transparent}
+  button.primary:hover{filter:brightness(1.06)}
+  .autoinfo{margin-left:auto;font-size:12px;color:var(--ink-soft);font-weight:600}
+
+  /* log */
+  .logsec{margin-top:14px;padding:18px 20px}
+  .log-wrap{overflow-x:auto;margin-top:4px}
+  table.log{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.log th,table.log td{text-align:left;padding:9px 10px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  table.log thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);border-bottom:1px solid var(--line-2)}
+  table.log tbody td{border-bottom:1px solid var(--line);color:var(--ink-2)}
+  table.log .num{font-family:var(--mono)}
+  tr.dhead td{background:var(--panel-2);font-weight:700;font-size:12px;color:var(--ink);letter-spacing:.01em}
+  .pillc{font-family:inherit;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;color:#fff}
+
+  /* approval modal */
+  .ov{position:fixed;inset:0;background:rgba(8,14,11,.55);display:none;place-items:start center;z-index:50;padding:20px;overflow:auto;backdrop-filter:blur(2px)}
+  .ov.on{display:grid}
+  .dlg{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:min(820px,100%);padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+  .dlg .bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+  .dlg .bar h2{margin:0;font-size:16px;flex:1}
+  .dlg input[type=date]{font:inherit;padding:8px 10px;border:1px solid var(--line-2);border-radius:9px;background:var(--panel-2);color:var(--ink)}
+  #approval{background:#fff;color:#111;padding:26px 28px;border:1px solid #ddd;border-radius:6px;font-size:13px;line-height:1.5}
+  #approval *{color:#111}
+  .ap-top{margin-bottom:14px}
+  .ap-title{text-align:center;font-size:22px;font-weight:800;margin:6px 0 16px;letter-spacing:.01em;line-height:1.35}
+  .ap-signwrap{display:flex;justify-content:flex-end}
+  table.ap-sign{border-collapse:collapse;width:auto}
+  table.ap-sign td{border:1px solid #333;text-align:center}
+  table.ap-sign td.lab{font-size:11px;font-weight:700;padding:3px 14px;background:#f2f2f2}
+  table.ap-sign td.box{height:54px;width:76px}
+  table.ap-meta{width:100%;border-collapse:collapse;margin:16px 0 12px}
+  table.ap-meta th,table.ap-meta td{border:1px solid #bbb;padding:7px 10px;text-align:left;font-size:12.5px}
+  table.ap-meta th{background:#f4f6f4;width:88px;font-weight:700}
+  .ap-sum{background:#f4f6f4;border:1px solid #bbb;padding:9px 12px;font-weight:700;margin-bottom:12px;font-size:13px}
+  table.ap-log{width:100%;border-collapse:collapse;font-size:12px}
+  table.ap-log th,table.ap-log td{border:1px solid #bbb;padding:6px 8px;text-align:center;white-space:nowrap}
+  table.ap-log th{background:#f4f6f4;font-weight:700}
+  .ap-etc{border:1px solid #bbb;padding:10px 12px;margin-top:12px;font-size:12.5px;min-height:46px}
+  .ap-foot{margin-top:14px;font-size:11px;color:#666;line-height:1.5}
+  @media print{
+    .topbar,.wrap{display:none!important}
+    .ov{position:static;display:block!important;background:none;padding:0;overflow:visible;backdrop-filter:none}
+    .dlg{box-shadow:none;border:none;width:100%;padding:0}
+    .no-print{display:none!important}
+    #approval{border:none;border-radius:0;padding:0}
+    @page{margin:14mm}
+  }
+  @media (prefers-reduced-motion:reduce){.topbar .dot,.gmark{transition:none;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand">청주 <b>폭염 모니터</b></span><span class="sep">·</span>
+  <span class="sub">충청북도 청주시 · 온열질환 체감온도</span>
+  <span class="clock"><span class="dot"></span><span id="updated">불러오는 중…</span></span>
+</div>
+
+<div class="wrap">
+  <!-- HERO -->
+  <section class="panel hero" id="hero">
+    <div class="hero-main">
+      <div class="reading">
+        <div class="eyebrow rlabel">체감온도 · 기온+습도</div>
+        <div class="rnum"><span id="big">--</span><span class="unit">℃</span></div>
+        <div class="rtime" id="reading-time">청주 실시간 측정</div>
+      </div>
+      <div class="hero-status">
+        <span class="badge" id="lv"><span class="bd"></span>측정 중</span>
+        <p class="directive" id="head">청주 실시간 체감온도를 불러오는 중…</p>
+        <div class="env"><span id="temp">기온 --</span><span id="humi">습도 --</span></div>
+      </div>
+    </div>
+    <div class="gauge">
+      <div class="gticks" id="gticks"></div>
+      <div class="gtrack"></div>
+      <div class="gmark" id="gmark"><span class="val" id="gval"></span><span class="pin"></span></div>
+    </div>
+  </section>
+
+  <!-- 필요 조치 (전체폭) -->
+  <section class="panel card stack">
+    <div class="head"><span class="eyebrow">필요 조치</span><span class="n" id="act-band"></span></div>
+    <div id="actions"></div>
+    <div class="srcline">📍 <b>출처: 기상청(청주) 발표 기준값</b> — 옥외작업의 "측정 곤란 시 기상청 발표 체감온도 사용" 근거. 실내·열원 작업장은 현장 실측 필요.</div>
+  </section>
+
+  <!-- 오늘 요약 (스탯 4칸) -->
+  <section class="panel card stack">
+    <div class="head"><span class="eyebrow">오늘 요약</span></div>
+    <div class="stats">
+      <div class="tile"><span class="k">측정 횟수</span><span class="v" id="t-count">0회</span></div>
+      <div class="tile"><span class="k">당일 최고 체감</span><span class="v" id="t-max">—</span></div>
+      <div class="tile"><span class="k">최고 단계</span><span class="v" id="t-band">—</span></div>
+      <div class="tile"><span class="k">누적 보관</span><span class="v" id="t-total">0건</span></div>
+    </div>
+  </section>
+
+  <details class="panel law">
+    <summary>법령 확인하기 — 산업안전보건기준에 관한 규칙</summary>
+    <div class="law-body">
+      <p><b>근거</b> — 산업안전보건법 2024.10.22 개정 → <b>2025.6.1 시행</b>. 사업주 보건조치에 "폭염·한파 장시간 작업으로 인한 건강장해"가 신설됨.</p>
+      <h3>폭염작업이란</h3>
+      <p>측정한 <b>체감온도 31℃ 이상</b> 장소에서 하루 <b>2시간 이상</b> 이뤄지는 작업. 이 기준부터 사업주 조치 의무 발생.</p>
+      <h3>체감온도 구간별 조치</h3>
+      <div class="log-wrap"><table class="t2">
+        <thead><tr><th>체감온도</th><th>단계</th><th>주요 조치</th></tr></thead>
+        <tbody>
+          <tr><td>31℃↑</td><td>폭염작업 [법령]</td><td>2시간↑ 작업 시 — 냉방·통풍 / 작업시간 조정 / 휴식 중 택1 이상 + 체감온도 측정·기록</td></tr>
+          <tr><td>33℃↑</td><td>주의보 [법령·권고]</td><td>매 2시간마다 20분↑ 휴식(변동 가능) · 작업시간 조정·단축</td></tr>
+          <tr><td>35℃↑</td><td>경보 [권고]</td><td>14~17시 옥외작업 중지</td></tr>
+          <tr><td>38℃↑</td><td>중대경보 [권고]</td><td>긴급조치 외 옥외작업 전면 중지(강력 권고)</td></tr>
+        </tbody>
+      </table></div>
+      <h3>측정 위치 — 작업장소 원칙 / 기상청 대체 예외</h3>
+      <ul>
+        <li><b>원칙</b>: 작업장소에 온·습도계 비치 후 그 자리 측정.</li>
+        <li><b>예외</b>: 측정 곤란 시 <b>기상청 발표 체감온도</b> 사용·기재 가능 → 옥외작업이 여기 해당.</li>
+        <li><b>주의</b>: 실내·열원·밀폐공간은 반드시 현장 실측.</li>
+      </ul>
+      <h3>기록·보관</h3>
+      <p>측정값과 시행 조치를 일자별 기록. 확인 자료상 <b>당해연도 12월 31일까지 보관</b>.</p>
+      <p class="warn">⚠️ 확인 필요 — 33℃ 휴식조항 변동 가능 · 정확한 조문번호·보존기간은 국가법령정보센터 원문 확인 권장.</p>
+      <h3>출처</h3>
+      <ul>
+        <li><a href="https://www.korea.kr/news/policyNewsView.do?newsId=148964293" target="_blank" rel="noopener">대한민국 정책브리핑 — 옥외작업 중지 기준</a></li>
+        <li><a href="https://www.kimchang.com/ko/insights/detail.kc?sch_section=4&idx=32261" target="_blank" rel="noopener">김·장 법률사무소 — 온열질환 예방조치 규제 강화</a></li>
+        <li><a href="https://data.kma.go.kr/climate/windChill/selectWindChillChart.do" target="_blank" rel="noopener">기상청 — 체감온도(여름철 공식)</a></li>
+      </ul>
+    </div>
+  </details>
+
+  <div class="controls">
+    <button class="primary" id="refresh">↻ 새로고침</button>
+    <button id="export">CSV 내보내기</button>
+    <button id="approval-btn">일일 결재문서</button>
+    <span class="autoinfo">서버 자동기록 · 근무시간 08:30–19:00 · 매시간 1회 (GitHub Actions)</span>
+  </div>
+
+  <section class="panel logsec">
+    <div class="head" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="eyebrow">측정 기록</span><span class="n" id="logcnt" style="font-size:12px;color:var(--ink-soft)"></span>
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <label style="font-size:12px;color:var(--ink-soft)">날짜 조회</label>
+        <input type="date" id="log-date" style="font:inherit;font-size:12.5px;padding:5px 9px;border:1px solid var(--line-2);border-radius:8px;background:var(--panel);color:var(--ink)">
+        <button id="log-all" style="font-size:12px;padding:6px 11px">전체</button>
+      </span>
+    </div>
+    <div class="log-wrap"><table class="log" id="logtbl"><thead><tr><th>시각</th><th>기온</th><th>습도</th><th>체감온도</th><th>단계</th><th>출처</th></tr></thead><tbody></tbody></table></div>
+  </section>
+</div>
+
+<div class="ov" id="ap-ov"><div class="dlg">
+  <div class="bar no-print">
+    <h2>일일 결재문서</h2>
+    <label style="font-size:12px;color:var(--ink-soft)">대상일</label>
+    <input type="date" id="ap-date">
+    <button class="primary" id="ap-print">🖨️ 인쇄</button>
+    <button id="ap-close">닫기</button>
+  </div>
+  <div id="approval"></div>
+</div></div>
+
+<script>
+const LAT=36.6424, LON=127.4890, KEY='cheongju-heat-log-v1';
+const q=s=>document.querySelector(s);
+let logs=[];
+async function loadLog(){ try{const r=await fetch('./data/log.json?_='+Date.now()); if(r.ok) logs=await r.json();}catch(e){} renderLog(); }
+let logFilter=null; // null=전체, 'YYYY-MM-DD'=해당일만
+
+function wetBulb(Ta,RH){return Ta*Math.atan(0.151977*Math.pow(RH+8.313659,0.5))+Math.atan(Ta+RH)-Math.atan(RH-1.676331)+0.00391838*Math.pow(RH,1.5)*Math.atan(0.023101*RH)-4.686035;}
+function perceived(Ta,RH){const Tw=wetBulb(Ta,RH);return -0.2442+0.55399*Tw+0.45535*Ta-0.0022*Tw*Tw+0.00278*Tw*Ta+3.0;}
+function inWork(d){const m=d.getHours()*60+d.getMinutes();return m>=510&&m<=1140;} // 08:30~19:00
+
+const LADDER=[
+  {min:-1e9,key:'정상',color:'var(--ok)'},{min:31,key:'폭염작업',color:'var(--lv1)'},
+  {min:33,key:'주의보',color:'var(--lv2)'},{min:35,key:'경보',color:'var(--lv3)'},{min:38,key:'중대경보',color:'var(--lv4)'},
+];
+function bandIdx(pt){let i=0;for(let k=0;k<LADDER.length;k++)if(pt>=LADDER[k].min)i=k;return i;}
+const HEAD=['정상 범위 · 수분 섭취 권장','폭염작업 구간 · 냉방·휴식 등 조치 시행','작업시간 조정·단축 · 2시간마다 휴식','⚠ 14~17시 옥외작업 중지','⚠ 긴급작업 외 옥외작업 전면 중지'];
+function acts(i){const A=[
+  [['rec','현재 폭염작업 기준(31℃) 미만 · 평상 관리'],['rec','수시 수분 섭취']],
+  [['law','<b>폭염작업</b> — 2시간↑ 작업 시 냉방·통풍 / 작업시간 조정 / 휴식 중 택1 이상'],['law','체감온도 측정·기록·보관'],['rec','시원한 물·그늘 상시 제공']],
+  [['rec','작업시간대 조정·옥외작업 단축'],['law','매 2시간마다 20분↑ 휴식(변동 가능·확인)'],['law','체감온도 측정·기록·보관']],
+  [['rec','<b>14~17시 옥외작업 중지</b>'],['law','매 2시간마다 20분↑ 휴식'],['law','체감온도 측정·기록·보관']],
+  [['rec','긴급조치 외 <b>모든 옥외작업 중지</b>(강력)'],['rec','14~17시 옥외작업 전면 중지'],['law','측정·기록·보관 + 휴식 부여']],
+];return A[i];}
+function fmtTime(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+function todayKey(){const p=n=>String(n).padStart(2,'0');const d=new Date();return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
+
+// gauge ticks (28~40℃)
+const GMIN=28, GMAX=40;
+const pctOf=t=>Math.max(0,Math.min(100,(t-GMIN)/(GMAX-GMIN)*100));
+q('#gticks').innerHTML=[31,33,35,38].map(t=>`<div class="gtick" style="left:${pctOf(t)}%"><span>${t}</span><i></i></div>`).join('');
+
+function paint(Ta,RH,pt){
+  const i=bandIdx(pt), b=LADDER[i], c=b.color;
+  const hero=q('#hero'); hero.style.setProperty('--band',c); hero.classList.toggle('alert',i>=3);
+  q('#big').textContent=pt.toFixed(1);
+  q('#lv').innerHTML='<span class="bd"></span>'+b.key; q('#lv').style.background=c;
+  q('#head').textContent=HEAD[i];
+  q('#temp').textContent='기온 '+Ta.toFixed(1)+'℃'; q('#humi').textContent='습도 '+Math.round(RH)+'%';
+  q('#act-band').textContent='체감 '+pt.toFixed(1)+'℃ · '+b.key;
+  q('#actions').innerHTML=acts(i).map(a=>`<div class="act"><span class="tag ${a[0]}">${a[0]==='law'?'법령':'권고'}</span><span class="txt">${a[1]}</span></div>`).join('');
+  const gm=q('#gmark'); gm.classList.add('show'); gm.style.left=pctOf(pt)+'%'; gm.querySelector('.pin').style.background=c; q('#gval').textContent=pt.toFixed(1)+'℃';
+}
+function renderToday(){
+  const d=todayKey(), day=logs.filter(r=>r.t.slice(0,10)===d); let mx=null; day.forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
+  q('#t-count').textContent=day.length+'회';
+  q('#t-max').textContent=mx?mx.pt.toFixed(1)+'℃':'—';
+  q('#t-band').textContent=mx?LADDER[bandIdx(mx.pt)].key:'—';
+  q('#t-total').textContent=logs.length+'건';
+}
+function renderLog(){
+  q('#logcnt').textContent=`총 ${logs.length}건 · 상시 보관`;
+  const tb=q('#logtbl tbody');
+  if(!logs.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--ink-soft);padding:14px 10px">아직 기록이 없어요.</td></tr>';renderToday();return;}
+  const byDate={}; logs.forEach(r=>{const d=r.t.slice(0,10);(byDate[d]=byDate[d]||[]).push(r);});
+  let _dates=Object.keys(byDate).sort().reverse();
+  if(logFilter) _dates=_dates.filter(d=>d===logFilter);
+  if(!_dates.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--ink-soft);padding:14px 10px">해당 날짜의 기록이 없어요.</td></tr>';renderToday();return;}
+  tb.innerHTML=_dates.map(d=>{
+    let mx=null; byDate[d].forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
+    const head=`<tr class="dhead"><td colspan="6">${d} · ${byDate[d].length}회 · 당일 최고 ${mx.pt.toFixed(1)}℃ (${LADDER[bandIdx(mx.pt)].key})</td></tr>`;
+    const rows=byDate[d].slice().reverse().map(r=>{const i=bandIdx(r.pt);
+      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td><td>${r.src||'기상청(청주)'}</td></tr>`;}).join('');
+    return head+rows;
+  }).join('');
+  renderToday();
+}
+
+async function fetchNow(){ // 현재값 표시만 (기록은 서버 GitHub Actions가 담당)
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m&timezone=Asia%2FSeoul`);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json(); const Ta=j.current.temperature_2m, RH=j.current.relative_humidity_2m, pt=perceived(Ta,RH);
+    paint(Ta,RH,pt);
+    const now=new Date(); q('#updated').textContent=fmtTime(now); q('#reading-time').textContent=fmtTime(now)+' 기준 (현재값)';
+  }catch(e){ q('#updated').innerHTML='불러오기 실패'; }
+}
+q('#refresh').addEventListener('click',()=>{fetchNow();loadLog();});
+q('#export').addEventListener('click',()=>{
+  if(!logs.length){alert('기록이 없습니다.');return;}
+  const head='일시,기온(℃),습도(%),체감온도(℃),단계,출처\n';
+  const body=logs.map(r=>`${r.t},${r.ta.toFixed(1)},${Math.round(r.rh)},${r.pt.toFixed(1)},${LADDER[bandIdx(r.pt)].key},${r.src||'기상청(청주)'}`).join('\n');
+  const blob=new Blob(['﻿'+head+body],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='청주_체감온도기록.csv';a.click();
+});
+
+// 일일 결재문서
+const apOv=q('#ap-ov');
+const SHORT=['평상 관리','냉방·휴식 등 택1 조치','작업단축·2h마다 20분 휴식','14~17시 옥외작업 중지','옥외작업 전면 중지'];
+function renderApproval(dateStr){
+  const day=logs.filter(r=>r.t.slice(0,10)===dateStr); let mx=null; day.forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
+  const sum=day.length?`당일 최고 체감온도 ${mx.pt.toFixed(1)}℃ · 단계 「${LADDER[bandIdx(mx.pt)].key}」 · 총 ${day.length}회 측정`:'해당일 측정 기록 없음';
+  const rows=day.length?day.map(r=>{const i=bandIdx(r.pt);
+    return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td>${SHORT[i]}</td></tr>`;}).join('')
+    :'<tr><td colspan="6">해당일 기록 없음</td></tr>';
+  q('#approval').innerHTML=`
+    <div class="ap-top">
+      <h1 class="ap-title">폭염 온열질환 체감온도 측정·조치 일일보고</h1>
+      <div class="ap-signwrap"><table class="ap-sign"><tr><td class="lab">담당</td><td class="lab">검토</td><td class="lab">승인</td></tr><tr><td class="box"></td><td class="box"></td><td class="box"></td></tr></table></div>
+    </div>
+    <table class="ap-meta">
+      <tr><th>사업장</th><td>(주)팜스토리한냉</td><th>작성일</th><td>${dateStr}</td></tr>
+      <tr><th>작업장소</th><td>[ 옥외작업장 ]</td><th>측정출처</th><td>기상청(청주) 발표 체감온도</td></tr>
+    </table>
+    <div class="ap-sum">${sum}</div>
+    <table class="ap-log"><thead><tr><th>시각</th><th>기온(℃)</th><th>습도(%)</th><th>체감온도(℃)</th><th>단계</th><th>조치사항</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="ap-etc"><b>특이사항 / 추가 조치</b><br><br></div>
+    <div class="ap-foot">※ 본 기록은 「산업안전보건기준에 관한 규칙」에 따른 체감온도 측정·조치 기록입니다. (당해연도 12월 31일까지 보관) · 측정출처: 기상청(청주) 발표 체감온도</div>`;
+}
+q('#approval-btn').addEventListener('click',()=>{const d=q('#ap-date');if(!d.value)d.value=todayKey();renderApproval(d.value);apOv.classList.add('on');});
+q('#ap-date').addEventListener('change',e=>renderApproval(e.target.value));
+q('#ap-close').addEventListener('click',()=>apOv.classList.remove('on'));
+apOv.addEventListener('click',e=>{if(e.target===apOv)apOv.classList.remove('on');});
+q('#ap-print').addEventListener('click',()=>window.print());
+document.addEventListener('keydown',e=>{if(e.key==='Escape')apOv.classList.remove('on');});
+
+q('#log-date').addEventListener('change',e=>{logFilter=e.target.value||null;renderLog();});
+q('#log-all').addEventListener('click',()=>{logFilter=null;q('#log-date').value='';renderLog();});
+loadLog(); fetchNow(); setInterval(fetchNow,600000); setInterval(loadLog,600000);
+console.assert(Math.abs(perceived(30,50)-29.5)<1.5,'체감온도 계산 이상');
+console.assert(bandIdx(35.2)===3 && bandIdx(30)===0,'구간 판정 이상');
+</script>
+</body>
+</html>
