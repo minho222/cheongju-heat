@@ -112,10 +112,11 @@
   .warn{background:color-mix(in srgb,var(--lv1) 13%,transparent);border-radius:8px;padding:10px 12px;color:var(--ink-2)}
 
   /* 라이브 기록표 — 조치사항 선택 / 행별 편집 */
-  table.log td.act-cell{white-space:normal;padding:5px 8px}
-  table.log select.actsel{font:inherit;font-size:11.5px;max-width:250px;width:100%;
-    border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);padding:3px 5px}
-  table.log td.rowedit{width:34px;text-align:center;padding:4px}
+  table.log td.act-cell{white-space:normal;padding:5px 8px;overflow:visible}
+  table.log select.actsel{font:inherit;font-size:11.5px;width:100%;
+    border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);padding:3px 5px;
+    text-overflow:ellipsis}
+  table.log td.rowedit{padding:4px}
   .rowbtn{font:inherit;font-size:12px;line-height:1;padding:4px 6px;border:1px solid var(--line-2);
     border-radius:6px;background:var(--panel);color:var(--ink);cursor:pointer}
   .rowbtn:hover{border-color:var(--accent)}
@@ -144,12 +145,23 @@
   /* log */
   .logsec{margin-top:14px;padding:18px 20px}
   .log-wrap{overflow-x:auto;margin-top:4px}
-  table.log{width:100%;border-collapse:collapse;font-size:12.5px}
-  table.log th,table.log td{text-align:left;padding:9px 10px;white-space:nowrap;font-variant-numeric:tabular-nums}
-  table.log thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);border-bottom:1px solid var(--line-2)}
+  table.log{width:100%;min-width:720px;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+  table.log th,table.log td{padding:8px 10px;vertical-align:middle;font-variant-numeric:tabular-nums;
+    overflow:hidden;text-overflow:ellipsis}
+  table.log thead th{position:sticky;top:0;z-index:1;background:var(--panel);
+    font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);
+    font-weight:700;border-bottom:1px solid var(--line-2);white-space:nowrap}
   table.log tbody td{border-bottom:1px solid var(--line);color:var(--ink-2)}
-  table.log .num{font-family:var(--mono)}
-  tr.dhead td{background:var(--panel-2);font-weight:700;font-size:12px;color:var(--ink);letter-spacing:.01em}
+  table.log tbody tr:hover td{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+  /* 숫자 열은 우측 정렬 + 고정폭 숫자 */
+  table.log .c-num{text-align:right;font-family:var(--mono)}
+  table.log .c-time{text-align:left;font-family:var(--mono);color:var(--ink)}
+  table.log .c-pt{text-align:right;font-family:var(--mono);color:var(--ink);font-weight:700}
+  table.log .c-lvl{text-align:center}
+  table.log .c-act{text-align:left}
+  table.log .c-edit{text-align:center}
+  tr.dhead td{background:var(--panel-2);font-weight:700;font-size:11.5px;color:var(--ink-soft);
+    letter-spacing:.02em;padding:7px 10px;border-bottom:1px solid var(--line-2)}
   .pillc{font-family:inherit;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;color:#fff}
 
   /* approval modal */
@@ -302,7 +314,15 @@
         <button id="log-all" style="font-size:12px;padding:6px 11px">전체</button>
       </span>
     </div>
-    <div class="log-wrap"><table class="log" id="logtbl"><thead><tr><th>시각</th><th>기온</th><th>습도</th><th>체감온도</th><th>단계</th><th>조치사항</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="log-wrap"><table class="log" id="logtbl">
+      <colgroup>
+        <col style="width:74px"><col style="width:80px"><col style="width:70px">
+        <col style="width:94px"><col style="width:88px"><col><col style="width:44px">
+      </colgroup>
+      <thead><tr>
+        <th class="c-time">시각</th><th class="c-num">기온</th><th class="c-num">습도</th>
+        <th class="c-pt">체감온도</th><th class="c-lvl">단계</th><th class="c-act">조치사항</th><th></th>
+      </tr></thead><tbody></tbody></table></div>
   </section>
 </div>
 
@@ -393,7 +413,15 @@ function renderLog(){
     let mx=null; byDate[d].forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
     const head=`<tr class="dhead"><td colspan="7">${d} · ${byDate[d].length}회 · 당일 최고 ${mx.pt.toFixed(1)}℃ (${LADDER[bandIdx(mx.pt)].key})</td></tr>`;
     const rows=byDate[d].slice().reverse().map(r=>{const i=bandIdx(r.pt);
-      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td><td class="act-cell">${actSelect(r)}</td><td class="rowedit"><button class="rowbtn" title="이 행 수정">✏️</button></td></tr>`;}).join('');
+      return `<tr>`
+        +`<td class="c-time num">${r.t.slice(11)}</td>`
+        +`<td class="c-num num">${r.ta.toFixed(1)}℃</td>`
+        +`<td class="c-num num">${Math.round(r.rh)}%</td>`
+        +`<td class="c-pt num">${r.pt.toFixed(1)}℃</td>`
+        +`<td class="c-lvl"><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td>`
+        +`<td class="c-act act-cell">${actSelect(r)}</td>`
+        +`<td class="c-edit rowedit"><button class="rowbtn" title="이 행 수정">✏️</button></td>`
+        +`</tr>`;}).join('');
     return head+rows;
   }).join('');
   renderToday();
