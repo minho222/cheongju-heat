@@ -250,7 +250,7 @@
     <button class="primary" id="refresh">↻ 새로고침</button>
     <button id="export">CSV 내보내기</button>
     <button id="approval-btn">일일 결재문서</button>
-    <span class="autoinfo">서버 자동기록 · 근무시간 08:30–19:00 · 매시간 1회 (GitHub Actions)</span>
+    <span class="autoinfo">서버 자동기록 · 08–19시 매 정시 (누락 시간대 자동 보완)</span>
   </div>
 
   <section class="panel logsec">
@@ -268,6 +268,11 @@
 <div class="ov" id="ap-ov"><div class="dlg">
   <div class="bar no-print">
     <h2>일일 결재문서</h2>
+    <label style="font-size:12px;color:var(--ink-soft)">사업장</label>
+    <select id="ap-site" style="font:inherit;font-size:12.5px;padding:5px 9px;border:1px solid var(--line-2);border-radius:8px;background:var(--panel);color:var(--ink)">
+      <option value="(주)팜스토리한냉">(주)팜스토리한냉</option>
+      <option value="(주)팜스토리도드람B&amp;F">(주)팜스토리도드람B&amp;F</option>
+    </select>
     <label style="font-size:12px;color:var(--ink-soft)">대상일</label>
     <input type="date" id="ap-date">
     <button class="primary" id="ap-print">🖨️ 인쇄</button>
@@ -285,7 +290,7 @@ let logFilter=null; // null=전체, 'YYYY-MM-DD'=해당일만
 
 function wetBulb(Ta,RH){return Ta*Math.atan(0.151977*Math.pow(RH+8.313659,0.5))+Math.atan(Ta+RH)-Math.atan(RH-1.676331)+0.00391838*Math.pow(RH,1.5)*Math.atan(0.023101*RH)-4.686035;}
 function perceived(Ta,RH){const Tw=wetBulb(Ta,RH);return -0.2442+0.55399*Tw+0.45535*Ta-0.0022*Tw*Tw+0.00278*Tw*Ta+3.0;}
-function inWork(d){const m=d.getHours()*60+d.getMinutes();return m>=510&&m<=1140;} // 08:30~19:00
+function inWork(d){const m=d.getHours()*60+d.getMinutes();return m>=480&&m<=1140;} // 08:00~19:00
 
 const LADDER=[
   {min:-1e9,key:'정상',color:'var(--ok)'},{min:31,key:'폭염작업',color:'var(--lv1)'},
@@ -365,9 +370,17 @@ q('#export').addEventListener('click',()=>{
 // 일일 결재문서
 const apOv=q('#ap-ov');
 const SHORT=['평상 관리','냉방·휴식 등 택1 조치','작업단축·2h마다 20분 휴식','14~17시 옥외작업 중지','옥외작업 전면 중지'];
+const SITE_KEY='cheongju-heat-site';
+const siteName=()=>localStorage.getItem(SITE_KEY)||'(주)팜스토리한냉';
+q('#ap-site').value=siteName();
+q('#ap-site').addEventListener('change',e=>{
+  localStorage.setItem(SITE_KEY,e.target.value);
+  renderApproval(q('#ap-date').value||todayKey());
+});
 function renderApproval(dateStr){
   const day=logs.filter(r=>r.t.slice(0,10)===dateStr); let mx=null; day.forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
   const sum=day.length?`당일 최고 체감온도 ${mx.pt.toFixed(1)}℃ · 단계 「${LADDER[bandIdx(mx.pt)].key}」 · 총 ${day.length}회 측정`:'해당일 측정 기록 없음';
+  const srcTxt=day.length?[...new Set(day.map(r=>r.src||'-'))].join(' / '):'기상청(청주)';
   const rows=day.length?day.map(r=>{const i=bandIdx(r.pt);
     return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td>${SHORT[i]}</td></tr>`;}).join('')
     :'<tr><td colspan="6">해당일 기록 없음</td></tr>';
@@ -377,13 +390,13 @@ function renderApproval(dateStr){
       <div class="ap-signwrap"><table class="ap-sign"><tr><td class="lab">담당</td><td class="lab">검토</td><td class="lab">승인</td></tr><tr><td class="box"></td><td class="box"></td><td class="box"></td></tr></table></div>
     </div>
     <table class="ap-meta">
-      <tr><th>사업장</th><td>(주)팜스토리한냉</td><th>작성일</th><td>${dateStr}</td></tr>
-      <tr><th>작업장소</th><td>[ 옥외작업장 ]</td><th>측정출처</th><td>기상청(청주) 발표 체감온도</td></tr>
+      <tr><th>사업장</th><td>${siteName()}</td><th>작성일</th><td>${dateStr}</td></tr>
+      <tr><th>작업장소</th><td>[ 옥외작업장 ]</td><th>측정출처</th><td>${srcTxt}</td></tr>
     </table>
     <div class="ap-sum">${sum}</div>
     <table class="ap-log"><thead><tr><th>시각</th><th>기온(℃)</th><th>습도(%)</th><th>체감온도(℃)</th><th>단계</th><th>조치사항</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="ap-etc"><b>특이사항 / 추가 조치</b><br><br></div>
-    <div class="ap-foot">※ 본 기록은 「산업안전보건기준에 관한 규칙」에 따른 체감온도 측정·조치 기록입니다. (당해연도 12월 31일까지 보관) · 측정출처: 기상청(청주) 발표 체감온도</div>`;
+    <div class="ap-foot">※ 본 기록은 「산업안전보건기준에 관한 규칙」에 따른 체감온도 측정·조치 기록입니다. (당해연도 12월 31일까지 보관) · 측정출처: ${srcTxt}</div>`;
 }
 q('#approval-btn').addEventListener('click',()=>{const d=q('#ap-date');if(!d.value)d.value=todayKey();renderApproval(d.value);apOv.classList.add('on');});
 q('#ap-date').addEventListener('change',e=>renderApproval(e.target.value));

@@ -27,7 +27,7 @@ jobs:
 
           const LAT = 36.6424, LON = 127.4890;
           const NX = 69, NY = 106;          // 기상청 격자 (청주)
-          const START_H = 9, END_H = 19;    // 기록 대상 정시 (근무 08:30~19:00)
+          const START_H = 8, END_H = 19;    // 기록 대상 정시 (08~19시)
           const KMA_KEY = process.env.KMA_KEY || '';
 
           const wb = (Ta, RH) => Ta*Math.atan(0.151977*Math.pow(RH+8.313659,0.5)) + Math.atan(Ta+RH)
@@ -103,12 +103,27 @@ jobs:
             added++;
           }
 
-          if (!added) { console.log('추가할 시간대 없음'); process.exit(0); }
+          // 기상청 키가 등록되면, 폴백으로 남아 있던 최근 기록을 기상청 관측값으로 교체
+          const KMA_SRC = '기상청 초단기실황(청주)';
+          let fixed = 0;
+          if (KMA_KEY) {
+            for (const r of logs.slice(-48)) {
+              if (r.src === KMA_SRC) continue;
+              const dash = r.t.slice(0,10), hh = r.t.slice(11,13);
+              const v = await kma(dash.replace(/-/g,''), hh);
+              if (!v) continue;                       // 조회 가능 기간이 지난 건 그대로 둠
+              r.ta = v.ta; r.rh = v.rh; r.pt = perceived(v.ta, v.rh);
+              r.t = `${dash} ${hh}:00`; r.src = KMA_SRC;
+              fixed++;
+            }
+          }
+
+          if (!added && !fixed) { console.log('추가·교체할 항목 없음'); process.exit(0); }
 
           logs.sort((a,b) => a.t.localeCompare(b.t));
           if (logs.length > 20000) logs = logs.slice(-20000);
           writeFileSync('data/log.json', JSON.stringify(logs));
-          console.log(`${added}건 기록 (기상청 ${byKma} / 폴백 ${added-byKma}), 총 ${logs.length}건`);
+          console.log(`신규 ${added}건 (기상청 ${byKma} / 폴백 ${added-byKma}) · 기상청 값으로 교체 ${fixed}건 · 총 ${logs.length}건`);
           EOF
           node collect.mjs
 
