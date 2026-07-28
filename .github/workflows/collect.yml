@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Fetch weather & backfill log
+        timeout-minutes: 8
         env:
           KMA_KEY: ${{ secrets.KMA_KEY }}
         run: |
@@ -49,7 +50,7 @@ jobs:
             const u = 'https://apihub.kma.go.kr/api/typ01/url/kma_sfctm2.php'
               + `?tm=${ymd}${hh}00&stn=${site.stn}&help=0&authKey=${KMA_KEY}`;
             try {
-              const txt = await (await fetch(u)).text();
+              const txt = await (await fetch(u, { signal: AbortSignal.timeout(12000) })).text();
               if (txt.includes('"status"')) return null;               // 403 등 JSON 오류 응답
               const line = txt.split('\n').find(l => l.trim() && !l.trim().startsWith('#'));
               if (!line) return null;
@@ -67,7 +68,7 @@ jobs:
               + `?pageNo=1&numOfRows=100&dataType=JSON&base_date=${ymd}&base_time=${hh}00`
               + `&nx=${site.nx}&ny=${site.ny}&authKey=${KMA_KEY}`;
             try {
-              const j = await (await fetch(u)).json();
+              const j = await (await fetch(u, { signal: AbortSignal.timeout(12000) })).json();
               const items = j?.response?.body?.items?.item;
               if (!Array.isArray(items)) return null;
               const pick = c => { const v = items.find(x => x.category === c); return v ? Number(v.obsrValue) : null; };
@@ -86,7 +87,8 @@ jobs:
             try {
               return await fetch(
                 `https://api.open-meteo.com/v1/forecast?latitude=${site.lat}&longitude=${site.lon}`
-                + '&hourly=temperature_2m,relative_humidity_2m&past_days=2&forecast_days=1&timezone=Asia%2FSeoul'
+                + '&hourly=temperature_2m,relative_humidity_2m&past_days=2&forecast_days=1&timezone=Asia%2FSeoul',
+                { signal: AbortSignal.timeout(15000) }
               ).then(r => r.json());
             } catch { return null; }
           }
@@ -147,7 +149,7 @@ jobs:
 
             // 폴백으로 남아 있던 최근 기록을 기상청 관측값으로 교체
             if (KMA_KEY) {
-              for (const r of logs.filter(x => x.site === site.id).slice(-48)) {
+              for (const r of logs.filter(x => x.site === site.id).slice(-24)) {
                 if (isKma(r.src)) continue;
                 const dash = r.t.slice(0,10), hh = r.t.slice(11,13);
                 const v = await kma(site, dash.replace(/-/g,''), hh);
