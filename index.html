@@ -170,6 +170,8 @@
   table.ap-log{width:100%;border-collapse:collapse;font-size:12px}
   table.ap-log th,table.ap-log td{border:1px solid #bbb;padding:6px 8px;text-align:center;white-space:nowrap}
   table.ap-log th{background:#f4f6f4;font-weight:700}
+  table.ap-log td.act-cell{white-space:normal;text-align:left;padding:4px 6px}
+  table.ap-log select.actsel{font:inherit;font-size:11.5px;width:100%;max-width:230px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#000;padding:2px 4px}
   .ap-etc{border:1px solid #bbb;padding:10px 12px;margin-top:12px;font-size:12.5px;min-height:46px}
   .ap-foot{margin-top:14px;font-size:11px;color:#666;line-height:1.5}
   /* 결재문서 편집 모드 */
@@ -177,6 +179,9 @@
   #approval.editing td,#approval.editing th{background:color-mix(in srgb,var(--accent) 5%,transparent)}
   #approval.editing td:focus,#approval.editing th:focus,#approval.editing .ap-etc:focus{outline:2px solid var(--accent);outline-offset:-2px}
   @media print{
+    /* 선택상자는 인쇄 시 일반 텍스트처럼 */
+    #approval select.actsel{appearance:none;-webkit-appearance:none;border:none;background:none;
+      padding:0;max-width:none;width:auto;font-size:11.5px;color:#000}
     #approval.editing{outline:none}
     #approval.editing td,#approval.editing th{background:none}
     .topbar,.wrap{display:none!important}
@@ -424,6 +429,29 @@ q('#export').addEventListener('click',()=>{
 // 일일 결재문서
 const apOv=q('#ap-ov');
 const SHORT=['평상 관리','냉방·휴식 등 택1 조치','작업단축·2h마다 20분 휴식','14~17시 옥외작업 중지','옥외작업 전면 중지'];
+
+// 결재문서 조치사항 선택 항목 — 「산업안전보건기준에 관한 규칙」 제560조 및 고용노동부 폭염 대응지침 기준
+const ACT_OPTS=[
+  '평상 관리 · 수분 섭취 안내',
+  '냉방·통풍장치 가동 (제560조②)',
+  '작업시간대 조정 (제560조②)',
+  '휴식시간 부여 (제560조②)',
+  '냉방·통풍장치 가동 + 휴식시간 부여',
+  '작업시간대 조정 + 휴식시간 부여',
+  '2시간 이내 20분 이상 휴식 부여 (제560조③)',
+  '20분 휴식 + 시원한 물·그늘 제공',
+  '개인용 냉방·통풍장치 지급 (제560조③ 단서)',
+  '개인용 보냉장구 지급·착용 (제560조③ 단서)',
+  '14~17시 옥외작업 중지 (폭염경보 권고)',
+  '긴급조치 외 옥외작업 전면 중지 (중대경보 권고)',
+];
+const ACT_DEFAULT=[0,4,6,10,11];   // 단계별 기본 선택
+function actSelect(i){
+  const d=ACT_DEFAULT[i];
+  return `<select class="actsel">`
+    + ACT_OPTS.map((o,k)=>`<option${k===d?' selected':''}>${o}</option>`).join('')
+    + `<option value="__custom">직접 입력…</option></select>`;
+}
 const siteName=()=>SITE.name;
 q('#site-sel').value=SITE.id;
 q('#site-sel').addEventListener('change',e=>{
@@ -436,7 +464,7 @@ function renderApproval(dateStr){
   const day=logs.filter(r=>r.t.slice(0,10)===dateStr); let mx=null; day.forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
   const sum=day.length?`당일 최고 체감온도 ${mx.pt.toFixed(1)}℃ · 단계 「${LADDER[bandIdx(mx.pt)].key}」 · 총 ${day.length}회 측정`:'해당일 측정 기록 없음';
   const rows=day.length?day.map(r=>{const i=bandIdx(r.pt);
-    return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td>${SHORT[i]}</td></tr>`;}).join('')
+    return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td class="act-cell">${actSelect(i)}</td></tr>`;}).join('')
     :'<tr><td colspan="6">해당일 기록 없음</td></tr>';
   q('#approval').innerHTML=`
     <div class="ap-top">
@@ -489,6 +517,15 @@ function setEditable(on){
   q('#ap-edit').classList.toggle('primary',on);
 }
 q('#ap-edit').addEventListener('click',()=>setEditable(!editing));
+// 조치사항에서 '직접 입력…' 선택 시 해당 칸을 자유 입력으로 전환
+q('#approval').addEventListener('change',e=>{
+  if(!e.target.classList||!e.target.classList.contains('actsel')) return;
+  if(e.target.value!=='__custom') return;
+  const td=e.target.closest('td');
+  td.innerHTML='';
+  td.setAttribute('contenteditable','true');
+  td.focus();
+});
 q('#ap-addrow').addEventListener('click',()=>{
   const tb=q('#approval .ap-log tbody'); if(!tb) return;
   if(tb.children.length===1 && tb.children[0].children.length===1) tb.innerHTML='';  // '기록 없음' 행 제거
