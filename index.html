@@ -110,6 +110,13 @@
   .law-body .t2 th{background:var(--panel-2);font-weight:700;color:var(--ink)}
   .warn{background:color-mix(in srgb,var(--lv1) 13%,transparent);border-radius:8px;padding:10px 12px;color:var(--ink-2)}
 
+  /* 라이브 화면 편집 모드 */
+  body.live-editing .hero,body.live-editing .log-wrap{outline:2px dashed color-mix(in srgb,var(--accent) 50%,transparent);outline-offset:6px;border-radius:10px}
+  body.live-editing [contenteditable="true"]{background:color-mix(in srgb,var(--accent) 8%,transparent);border-radius:4px}
+  body.live-editing [contenteditable="true"]:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .live-edit-note{display:none;margin-top:10px;font-size:12px;color:var(--lv2);font-weight:700}
+  body.live-editing .live-edit-note{display:block}
+
   /* 체감온도 산출표 */
   .httable-wrap{overflow-x:auto;margin:10px 0;border:1px solid var(--line);border-radius:8px}
   .httable{border-collapse:collapse;font-family:var(--mono);font-size:11.5px;width:100%;min-width:560px}
@@ -215,7 +222,8 @@
   <section class="panel card stack">
     <div class="head"><span class="eyebrow">필요 조치</span><span class="n" id="act-band"></span></div>
     <div id="actions"></div>
-    <div class="srcline" id="srcline">📍 출처를 불러오는 중…</div>
+    <div class="srcline" id="srcline">📍 불러오는 중…</div>
+    <div class="live-edit-note">✏️ 편집 모드 — 자동 갱신이 멈춰 있습니다. 편집한 값은 저장되지 않으며 편집 종료 시 원래 값으로 돌아갑니다.</div>
   </section>
 
   <!-- 오늘 요약 (스탯 4칸) -->
@@ -281,6 +289,7 @@
       <option value="es">(주)팜스토리도드람B&amp;F · 음성</option>
     </select>
     <button class="primary" id="approval-btn">📄 일일 결재문서</button>
+    <button id="live-edit">✏️ 편집</button>
     <button id="refresh">↻ 새로고침</button>
     <button id="export">CSV 내보내기</button>
     <span class="autoinfo">서버 자동기록 · 08–19시 매 정시 (누락 시간대 자동 보완)</span>
@@ -294,7 +303,7 @@
         <button id="log-all" style="font-size:12px;padding:6px 11px">전체</button>
       </span>
     </div>
-    <div class="log-wrap"><table class="log" id="logtbl"><thead><tr><th>시각</th><th>기온</th><th>습도</th><th>체감온도</th><th>단계</th><th>출처</th></tr></thead><tbody></tbody></table></div>
+    <div class="log-wrap"><table class="log" id="logtbl"><thead><tr><th>시각</th><th>기온</th><th>습도</th><th>체감온도</th><th>단계</th></tr></thead><tbody></tbody></table></div>
   </section>
 </div>
 
@@ -327,8 +336,7 @@ function applySite(){
   q('#brand-city').textContent=SITE.obs==='청주'?'청주':'음성';
   q('#sub-region').textContent=`${SITE.region} · 온열질환 체감온도`;
   q('#reading-time').textContent=`${SITE.obs} 실시간 측정`;
-  q('#srcline').innerHTML=`📍 <b>출처: 기상청 ${SITE.obs}관측소(지점 ${SITE.stn}) 발표 기준값</b> — 「산업안전보건기준에 관한 규칙」 제559조에 따라 작업장소 측정이 곤란한 경우 기상청 발표 체감온도 사용. 실내·열원 작업장은 현장 실측 필요.`
-    +(SITE.id==='es'?'<br><span style="color:var(--ink-soft)">※ 음성에는 종관관측소가 없어 최근접 관측소인 충주 기준값을 사용합니다.</span>':'');
+  q('#srcline').innerHTML='📍 옥외작업 기준값입니다 — <b>실내·열원 작업장은 현장 실측</b>이 필요합니다. 「산업안전보건기준에 관한 규칙」 제558조~제560조 적용.';
 }
 async function loadLog(){ try{const r=await fetch('./data/log.json?_='+Date.now()); if(r.ok) allLogs=await r.json();}catch(e){} applySite(); renderLog(); }
 let logFilter=null; // null=전체, 'YYYY-MM-DD'=해당일만
@@ -388,10 +396,11 @@ function renderLog(){
     let mx=null; byDate[d].forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
     const head=`<tr class="dhead"><td colspan="6">${d} · ${byDate[d].length}회 · 당일 최고 ${mx.pt.toFixed(1)}℃ (${LADDER[bandIdx(mx.pt)].key})</td></tr>`;
     const rows=byDate[d].slice().reverse().map(r=>{const i=bandIdx(r.pt);
-      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td><td>${r.src||"-"}</td></tr>`;}).join('');
+      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td></tr>`;}).join('');
     return head+rows;
   }).join('');
   renderToday();
+  if(typeof liveEditing!=='undefined' && liveEditing) setLiveEdit(true);   // 표 재생성 후 편집 상태 유지
 }
 
 async function fetchNow(){ // 현재값 표시만 (기록은 서버 GitHub Actions가 담당)
@@ -406,8 +415,8 @@ async function fetchNow(){ // 현재값 표시만 (기록은 서버 GitHub Actio
 q('#refresh').addEventListener('click',()=>{fetchNow();loadLog();});
 q('#export').addEventListener('click',()=>{
   if(!logs.length){alert('기록이 없습니다.');return;}
-  const head='일시,기온(℃),습도(%),체감온도(℃),단계,출처\n';
-  const body=logs.map(r=>`${r.t},${r.ta.toFixed(1)},${Math.round(r.rh)},${r.pt.toFixed(1)},${LADDER[bandIdx(r.pt)].key},${r.src||"-"}`).join('\n');
+  const head='일시,기온(℃),습도(%),체감온도(℃),단계\n';
+  const body=logs.map(r=>`${r.t},${r.ta.toFixed(1)},${Math.round(r.rh)},${r.pt.toFixed(1)},${LADDER[bandIdx(r.pt)].key}`).join('\n');
   const blob=new Blob(['﻿'+head+body],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${SITE.obs}_체감온도기록.csv`;a.click();
 });
@@ -494,7 +503,25 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')apOv.classList.remov
 
 q('#log-date').addEventListener('change',e=>{logFilter=e.target.value||null;renderLog();});
 q('#log-all').addEventListener('click',()=>{logFilter=null;q('#log-date').value='';renderLog();});
-loadLog(); fetchNow(); setInterval(fetchNow,600000); setInterval(loadLog,600000);
+// ── 라이브 화면 편집 (자동 갱신 일시정지) ──────────────
+let timers=[], liveEditing=false;
+function startTimers(){ stopTimers(); timers=[setInterval(fetchNow,600000), setInterval(loadLog,600000)]; }
+function stopTimers(){ timers.forEach(clearInterval); timers=[]; }
+const LIVE_EDIT_SEL='#big, .env span, .log-wrap td, #head, #reading-time';
+function setLiveEdit(on){
+  liveEditing=on;
+  document.body.classList.toggle('live-editing',on);
+  document.querySelectorAll(LIVE_EDIT_SEL).forEach(el=>{
+    if(on) el.setAttribute('contenteditable','true'); else el.removeAttribute('contenteditable');
+  });
+  const b=q('#live-edit');
+  b.textContent=on?'✔ 편집 완료':'✏️ 편집';
+  b.classList.toggle('primary',on);
+  if(on) stopTimers(); else { startTimers(); fetchNow(); loadLog(); }
+}
+q('#live-edit').addEventListener('click',()=>setLiveEdit(!liveEditing));
+
+loadLog(); fetchNow(); startTimers();
 console.assert(Math.abs(perceived(30,50)-29.5)<1.5,'체감온도 계산 이상');
 console.assert(bandIdx(35.2)===3 && bandIdx(30)===0,'구간 판정 이상');
 </script>
