@@ -130,7 +130,7 @@ jobs:
           let fixed = 0;
           if (KMA_KEY) {
             for (const r of logs.slice(-48)) {
-              if (String(r.src).startsWith('기상청')) continue;
+              if (/^기상청 (종관기상관측|초단기실황)/.test(String(r.src))) continue;   // 초기 '기상청(청주)' 표기는 실제 폴백값이므로 교체 대상
               const dash = r.t.slice(0,10), hh = r.t.slice(11,13);
               const v = await kma(dash.replace(/-/g,''), hh);
               if (!v) continue;                       // 조회 가능 기간이 지난 건 그대로 둠
