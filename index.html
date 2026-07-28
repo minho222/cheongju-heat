@@ -154,7 +154,13 @@
   table.ap-log th{background:#f4f6f4;font-weight:700}
   .ap-etc{border:1px solid #bbb;padding:10px 12px;margin-top:12px;font-size:12.5px;min-height:46px}
   .ap-foot{margin-top:14px;font-size:11px;color:#666;line-height:1.5}
+  /* 결재문서 편집 모드 */
+  #approval.editing{outline:2px dashed color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:6px}
+  #approval.editing td,#approval.editing th{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+  #approval.editing td:focus,#approval.editing th:focus,#approval.editing .ap-etc:focus{outline:2px solid var(--accent);outline-offset:-2px}
   @media print{
+    #approval.editing{outline:none}
+    #approval.editing td,#approval.editing th{background:none}
     .topbar,.wrap{display:none!important}
     .ov{position:static;display:block!important;background:none;padding:0;overflow:visible;backdrop-filter:none}
     .dlg{box-shadow:none;border:none;width:100%;padding:0}
@@ -275,6 +281,8 @@
     <h2>일일 결재문서</h2>
     <label style="font-size:12px;color:var(--ink-soft)">대상일</label>
     <input type="date" id="ap-date">
+    <button id="ap-edit">✏️ 편집</button>
+    <button id="ap-addrow">+ 행 추가</button>
     <button class="primary" id="ap-print">🖨️ 인쇄</button>
     <button id="ap-close">닫기</button>
   </div>
@@ -396,7 +404,6 @@ q('#site-sel').addEventListener('change',e=>{
 function renderApproval(dateStr){
   const day=logs.filter(r=>r.t.slice(0,10)===dateStr); let mx=null; day.forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
   const sum=day.length?`당일 최고 체감온도 ${mx.pt.toFixed(1)}℃ · 단계 「${LADDER[bandIdx(mx.pt)].key}」 · 총 ${day.length}회 측정`:'해당일 측정 기록 없음';
-  const srcTxt=day.length?[...new Set(day.map(r=>r.src||'-'))].join(' / '):`기상청 ${SITE.obs}관측소(지점 ${SITE.stn})`;
   const rows=day.length?day.map(r=>{const i=bandIdx(r.pt);
     return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td>${SHORT[i]}</td></tr>`;}).join('')
     :'<tr><td colspan="6">해당일 기록 없음</td></tr>';
@@ -407,23 +414,43 @@ function renderApproval(dateStr){
     </div>
     <table class="ap-meta">
       <tr><th>사업장</th><td>${siteName()}</td><th>작성일</th><td>${dateStr}</td></tr>
-      <tr><th>작업장소</th><td>[ 옥외작업장 ]</td><th>측정출처</th><td>${srcTxt}</td></tr>
-      <tr><th>측정근거</th><td colspan="3">「산업안전보건기준에 관한 규칙」 제559조 — 작업장소 측정이 곤란한 경우 기상청 발표 체감온도 활용</td></tr>
-      <tr><th>자료수집</th><td colspan="3">기상청 API허브(apihub.kma.go.kr) 자동 수집 · 매 정시 08~19시 · 산출식: 기상청 여름철 체감온도(습구온도 기반)</td></tr>
+      <tr><th>작업장소</th><td colspan="3">[ 옥외작업장 ]</td></tr>
     </table>
     <div class="ap-sum">${sum}</div>
     <table class="ap-log"><thead><tr><th>시각</th><th>기온(℃)</th><th>습도(%)</th><th>체감온도(℃)</th><th>단계</th><th>조치사항</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="ap-etc"><b>특이사항 / 추가 조치</b><br><br></div>
     <div class="ap-foot">
       ※ 본 기록은 「산업안전보건기준에 관한 규칙」 제558조(정의)·제559조(체감온도 측정)·제560조(폭염작업 시 조치)에 따른 폭염작업 체감온도 측정 및 조치 기록입니다.<br>
-      ※ 측정출처: ${srcTxt} — 같은 규칙 <b>제559조</b>에 따라 옥외 이동작업 등으로 작업장소에서의 측정이 곤란한 경우 기상청이 발표하는 체감온도를 활용함. 자료는 기상청 API허브(apihub.kma.go.kr)를 통해 정시 단위로 자동 수집하며, 체감온도 산출은 「기상법 시행령」 제8조의2에 따른 기상청 체감온도 기준(습구온도 기반 여름철 산출식)을 적용함.<br>
+      ※ 체감온도는 고용노동부 「폭염 대비 노동자 건강보호 대책」의 체감온도 산출식(건구온도·습구온도 기반)에 따라 산출함.<br>
       ※ 같은 규칙 <b>제562조제2항제3호</b>에 따라 체감온도와 조치사항을 일자별로 기록하여 해당 연도 말일까지 보관함.
     </div>`;
 }
-q('#approval-btn').addEventListener('click',()=>{const d=q('#ap-date');if(!d.value)d.value=todayKey();renderApproval(d.value);apOv.classList.add('on');});
-q('#ap-date').addEventListener('change',e=>renderApproval(e.target.value));
+q('#approval-btn').addEventListener('click',()=>{const d=q('#ap-date');if(!d.value)d.value=todayKey();renderApproval(d.value);setEditable(false);apOv.classList.add('on');});
+q('#ap-date').addEventListener('change',e=>{renderApproval(e.target.value);setEditable(false);});
 q('#ap-close').addEventListener('click',()=>apOv.classList.remove('on'));
 apOv.addEventListener('click',e=>{if(e.target===apOv)apOv.classList.remove('on');});
+// ── 결재문서 편집 / 직접 기입 ─────────────────────────
+let editing=false;
+function setEditable(on){
+  editing=on;
+  const ap=q('#approval');
+  ap.classList.toggle('editing',on);
+  ap.querySelectorAll('td,th,.ap-etc,.ap-sum').forEach(el=>{
+    if(on) el.setAttribute('contenteditable','true'); else el.removeAttribute('contenteditable');
+  });
+  q('#ap-edit').textContent=on?'✔ 편집 완료':'✏️ 편집';
+  q('#ap-edit').classList.toggle('primary',on);
+}
+q('#ap-edit').addEventListener('click',()=>setEditable(!editing));
+q('#ap-addrow').addEventListener('click',()=>{
+  const tb=q('#approval .ap-log tbody'); if(!tb) return;
+  if(tb.children.length===1 && tb.children[0].children.length===1) tb.innerHTML='';  // '기록 없음' 행 제거
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td>　</td><td>　</td><td>　</td><td>　</td><td>　</td><td>　</td>';
+  tb.appendChild(tr);
+  if(!editing) setEditable(true);
+  tr.children[0].focus();
+});
 q('#ap-print').addEventListener('click',()=>window.print());
 document.addEventListener('keydown',e=>{if(e.key==='Escape')apOv.classList.remove('on');});
 
