@@ -110,12 +110,16 @@
   .law-body .t2 th{background:var(--panel-2);font-weight:700;color:var(--ink)}
   .warn{background:color-mix(in srgb,var(--lv1) 13%,transparent);border-radius:8px;padding:10px 12px;color:var(--ink-2)}
 
-  /* 라이브 화면 편집 모드 */
-  body.live-editing .hero,body.live-editing .log-wrap{outline:2px dashed color-mix(in srgb,var(--accent) 50%,transparent);outline-offset:6px;border-radius:10px}
-  body.live-editing [contenteditable="true"]{background:color-mix(in srgb,var(--accent) 8%,transparent);border-radius:4px}
-  body.live-editing [contenteditable="true"]:focus{outline:2px solid var(--accent);outline-offset:1px}
-  .live-edit-note{display:none;margin-top:10px;font-size:12px;color:var(--lv2);font-weight:700}
-  body.live-editing .live-edit-note{display:block}
+  /* 라이브 기록표 — 조치사항 선택 / 행별 편집 */
+  table.log td.act-cell{white-space:normal;padding:5px 8px}
+  table.log select.actsel{font:inherit;font-size:11.5px;max-width:250px;width:100%;
+    border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);padding:3px 5px}
+  table.log td.rowedit{width:34px;text-align:center;padding:4px}
+  .rowbtn{font:inherit;font-size:12px;line-height:1;padding:4px 6px;border:1px solid var(--line-2);
+    border-radius:6px;background:var(--panel);color:var(--ink);cursor:pointer}
+  .rowbtn:hover{border-color:var(--accent)}
+  table.log tr.editing td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  table.log tr.editing td[contenteditable="true"]:focus{outline:2px solid var(--accent);outline-offset:-2px}
 
   /* 체감온도 산출표 */
   .httable-wrap{overflow-x:auto;margin:10px 0;border:1px solid var(--line);border-radius:8px}
@@ -228,7 +232,6 @@
     <div class="head"><span class="eyebrow">필요 조치</span><span class="n" id="act-band"></span></div>
     <div id="actions"></div>
     <div class="srcline" id="srcline">📍 불러오는 중…</div>
-    <div class="live-edit-note">✏️ 편집 모드 — 자동 갱신이 멈춰 있습니다. 편집한 값은 저장되지 않으며 편집 종료 시 원래 값으로 돌아갑니다.</div>
   </section>
 
   <!-- 오늘 요약 (스탯 4칸) -->
@@ -294,7 +297,6 @@
       <option value="es">(주)팜스토리도드람B&amp;F · 음성</option>
     </select>
     <button class="primary" id="approval-btn">📄 일일 결재문서</button>
-    <button id="live-edit">✏️ 편집</button>
     <button id="refresh">↻ 새로고침</button>
     <button id="export">CSV 내보내기</button>
     <span class="autoinfo">서버 자동기록 · 08–19시 매 정시 (누락 시간대 자동 보완)</span>
@@ -308,7 +310,7 @@
         <button id="log-all" style="font-size:12px;padding:6px 11px">전체</button>
       </span>
     </div>
-    <div class="log-wrap"><table class="log" id="logtbl"><thead><tr><th>시각</th><th>기온</th><th>습도</th><th>체감온도</th><th>단계</th></tr></thead><tbody></tbody></table></div>
+    <div class="log-wrap"><table class="log" id="logtbl"><thead><tr><th>시각</th><th>기온</th><th>습도</th><th>체감온도</th><th>단계</th><th>조치사항</th><th></th></tr></thead><tbody></tbody></table></div>
   </section>
 </div>
 
@@ -392,20 +394,19 @@ function renderToday(){
 function renderLog(){
   q('#logcnt').textContent=`총 ${logs.length}건 · 상시 보관`;
   const tb=q('#logtbl tbody');
-  if(!logs.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--ink-soft);padding:14px 10px">아직 기록이 없어요.</td></tr>';renderToday();return;}
+  if(!logs.length){tb.innerHTML='<tr><td colspan="7" style="color:var(--ink-soft);padding:14px 10px">아직 기록이 없어요.</td></tr>';renderToday();return;}
   const byDate={}; logs.forEach(r=>{const d=r.t.slice(0,10);(byDate[d]=byDate[d]||[]).push(r);});
   let _dates=Object.keys(byDate).sort().reverse();
   if(logFilter) _dates=_dates.filter(d=>d===logFilter);
-  if(!_dates.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--ink-soft);padding:14px 10px">해당 날짜의 기록이 없어요.</td></tr>';renderToday();return;}
+  if(!_dates.length){tb.innerHTML='<tr><td colspan="7" style="color:var(--ink-soft);padding:14px 10px">해당 날짜의 기록이 없어요.</td></tr>';renderToday();return;}
   tb.innerHTML=_dates.map(d=>{
     let mx=null; byDate[d].forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
-    const head=`<tr class="dhead"><td colspan="6">${d} · ${byDate[d].length}회 · 당일 최고 ${mx.pt.toFixed(1)}℃ (${LADDER[bandIdx(mx.pt)].key})</td></tr>`;
+    const head=`<tr class="dhead"><td colspan="7">${d} · ${byDate[d].length}회 · 당일 최고 ${mx.pt.toFixed(1)}℃ (${LADDER[bandIdx(mx.pt)].key})</td></tr>`;
     const rows=byDate[d].slice().reverse().map(r=>{const i=bandIdx(r.pt);
-      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td></tr>`;}).join('');
+      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td><td class="act-cell">${actSelect(r)}</td><td class="rowedit"><button class="rowbtn" title="이 행 수정">✏️</button></td></tr>`;}).join('');
     return head+rows;
   }).join('');
   renderToday();
-  if(typeof liveEditing!=='undefined' && liveEditing) setLiveEdit(true);   // 표 재생성 후 편집 상태 유지
 }
 
 async function fetchNow(){ // 현재값 표시만 (기록은 서버 GitHub Actions가 담당)
@@ -430,28 +431,52 @@ q('#export').addEventListener('click',()=>{
 const apOv=q('#ap-ov');
 const SHORT=['평상 관리','냉방·휴식 등 택1 조치','작업단축·2h마다 20분 휴식','14~17시 옥외작업 중지','옥외작업 전면 중지'];
 
-// 결재문서 조치사항 선택 항목 — 「산업안전보건기준에 관한 규칙」 제560조 및 고용노동부 폭염 대응지침 기준
-const ACT_OPTS=[
-  '평상 관리 · 수분 섭취 안내',
-  '냉방·통풍장치 가동 (제560조②)',
-  '작업시간대 조정 (제560조②)',
-  '휴식시간 부여 (제560조②)',
-  '냉방·통풍장치 가동 + 휴식시간 부여',
-  '작업시간대 조정 + 휴식시간 부여',
-  '2시간 이내 20분 이상 휴식 부여 (제560조③)',
-  '20분 휴식 + 시원한 물·그늘 제공',
-  '개인용 냉방·통풍장치 지급 (제560조③ 단서)',
-  '개인용 보냉장구 지급·착용 (제560조③ 단서)',
-  '14~17시 옥외작업 중지 (폭염경보 권고)',
-  '긴급조치 외 옥외작업 전면 중지 (중대경보 권고)',
+// 단계별 조치사항 선택 항목 — 「산업안전보건기준에 관한 규칙」 제560조 및 고용노동부 폭염 대응지침
+const ACT_BY_LEVEL=[
+  // 정상 (31℃ 미만) — 법정 조치 대상 아님
+  ['조치 없음 (평상 관리)','수시 수분 섭취 안내'],
+  // 폭염작업 31℃ 이상 — 제560조② : 냉방·통풍 / 작업시간대 조정 / 휴식 부여 중 1개 이상
+  ['냉방·통풍장치 가동 (제560조②)','작업시간대 조정 (제560조②)','휴식시간 부여 (제560조②)',
+   '냉방·통풍장치 가동 + 휴식시간 부여','작업시간대 조정 + 휴식시간 부여','시원한 물·그늘 제공 + 휴식시간 부여'],
+  // 주의보 33℃ 이상 — 제560조③ : 매 2시간 이내 20분 이상 휴식 (단서: 개인용 냉방·보냉장구)
+  ['2시간 이내 20분 이상 휴식 부여 (제560조③)','20분 휴식 + 시원한 물·그늘 제공','20분 휴식 + 작업시간대 조정',
+   '개인용 냉방·통풍장치 지급 (제560조③ 단서)','개인용 보냉장구 지급·착용 (제560조③ 단서)'],
+  // 경보 35℃ 이상 — 20분 휴식 + 무더위 시간대 옥외작업 중지 권고
+  ['14~17시 옥외작업 중지 + 20분 휴식','14~17시 옥외작업 중지 (폭염경보 권고)','작업시간대 오전 집중 조정 + 20분 휴식'],
+  // 중대경보 38℃ 이상 — 긴급조치 외 옥외작업 전면 중지 권고
+  ['긴급조치 외 옥외작업 전면 중지 (중대경보 권고)','옥외작업 중지 및 대피 안내','긴급조치 외 중지 + 20분 휴식'],
 ];
-const ACT_DEFAULT=[0,4,6,10,11];   // 단계별 기본 선택
-function actSelect(i){
-  const d=ACT_DEFAULT[i];
-  return `<select class="actsel">`
-    + ACT_OPTS.map((o,k)=>`<option${k===d?' selected':''}>${o}</option>`).join('')
-    + `<option value="__custom">직접 입력…</option></select>`;
+
+// 조치 선택값 보관 (사업장|시각 기준)
+const ACT_STORE='cheongju-heat-acts';
+const actStore=()=>{try{return JSON.parse(localStorage.getItem(ACT_STORE))||{};}catch(e){return {};}};
+const actKey=r=>`${r.site||'cj'}|${r.t}`;
+function saveAct(k,v){const s=actStore(); if(!v) delete s[k]; else s[k]=v; localStorage.setItem(ACT_STORE,JSON.stringify(s));}
+function getAct(r){return actStore()[actKey(r)]||null;}
+function actText(r){const i=bandIdx(r.pt); return getAct(r)||ACT_BY_LEVEL[i][0];}
+function actSelect(r){
+  const opts=ACT_BY_LEVEL[bandIdx(r.pt)], cur=actText(r);
+  const extra=opts.includes(cur)?'':`<option selected>${cur}</option>`;
+  return `<select class="actsel" data-k="${actKey(r)}">`
+    + opts.map(o=>`<option${o===cur?' selected':''}>${o}</option>`).join('')
+    + extra + `<option value="__custom">직접 입력…</option></select>`;
 }
+// 조치 선택 / 직접 입력 저장 (라이브 표·결재문서 공용)
+document.addEventListener('change',e=>{
+  const s=e.target;
+  if(!s.classList||!s.classList.contains('actsel')) return;
+  const k=s.dataset.k;
+  if(s.value==='__custom'){
+    const td=s.closest('td'); td.innerHTML=''; td.dataset.k=k;
+    td.setAttribute('contenteditable','true'); td.focus();
+    return;
+  }
+  saveAct(k,s.value);
+});
+document.addEventListener('blur',e=>{
+  const td=e.target;
+  if(td&&td.dataset&&td.dataset.k&&td.isContentEditable) saveAct(td.dataset.k,td.textContent.trim());
+},true);
 const siteName=()=>SITE.name;
 q('#site-sel').value=SITE.id;
 q('#site-sel').addEventListener('change',e=>{
@@ -464,8 +489,8 @@ function renderApproval(dateStr){
   const day=logs.filter(r=>r.t.slice(0,10)===dateStr); let mx=null; day.forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
   const sum=day.length?`당일 최고 체감온도 ${mx.pt.toFixed(1)}℃ · 단계 「${LADDER[bandIdx(mx.pt)].key}」 · 총 ${day.length}회 측정`:'해당일 측정 기록 없음';
   const rows=day.length?day.map(r=>{const i=bandIdx(r.pt);
-    return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td class="act-cell">${actSelect(i)}</td></tr>`;}).join('')
-    :'<tr><td colspan="6">해당일 기록 없음</td></tr>';
+    return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td class="act-cell">${actSelect(r)}</td></tr>`;}).join('')
+    :'<tr><td colspan="7">해당일 기록 없음</td></tr>';
   q('#approval').innerHTML=`
     <div class="ap-top">
       <h1 class="ap-title">폭염 온열질환 체감온도 측정·조치 일일보고</h1>
@@ -540,23 +565,22 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')apOv.classList.remov
 
 q('#log-date').addEventListener('change',e=>{logFilter=e.target.value||null;renderLog();});
 q('#log-all').addEventListener('click',()=>{logFilter=null;q('#log-date').value='';renderLog();});
-// ── 라이브 화면 편집 (자동 갱신 일시정지) ──────────────
-let timers=[], liveEditing=false;
+// ── 행별 편집 (편집 중에는 자동 갱신 정지) ──────────────
+let timers=[], editRows=0;
 function startTimers(){ stopTimers(); timers=[setInterval(fetchNow,600000), setInterval(loadLog,600000)]; }
 function stopTimers(){ timers.forEach(clearInterval); timers=[]; }
-const LIVE_EDIT_SEL='#big, .env span, .log-wrap td, #head, #reading-time';
-function setLiveEdit(on){
-  liveEditing=on;
-  document.body.classList.toggle('live-editing',on);
-  document.querySelectorAll(LIVE_EDIT_SEL).forEach(el=>{
-    if(on) el.setAttribute('contenteditable','true'); else el.removeAttribute('contenteditable');
+q('#logtbl').addEventListener('click',e=>{
+  const btn=e.target.closest('.rowbtn'); if(!btn) return;
+  const tr=btn.closest('tr'), on=!tr.classList.contains('editing');
+  tr.classList.toggle('editing',on);
+  tr.querySelectorAll('td.num').forEach(td=>{
+    if(on) td.setAttribute('contenteditable','true'); else td.removeAttribute('contenteditable');
   });
-  const b=q('#live-edit');
-  b.textContent=on?'✔ 편집 완료':'✏️ 편집';
-  b.classList.toggle('primary',on);
-  if(on) stopTimers(); else { startTimers(); fetchNow(); loadLog(); }
-}
-q('#live-edit').addEventListener('click',()=>setLiveEdit(!liveEditing));
+  btn.textContent=on?'✔':'✏️';
+  editRows+=on?1:-1;
+  if(editRows>0) stopTimers(); else startTimers();
+  if(on) tr.querySelector('td.num').focus();
+});
 
 loadLog(); fetchNow(); startTimers();
 console.assert(Math.abs(perceived(30,50)-29.5)<1.5,'체감온도 계산 이상');
