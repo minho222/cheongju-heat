@@ -167,8 +167,8 @@
 </head>
 <body>
 <div class="topbar">
-  <span class="brand">청주 <b>폭염 모니터</b></span><span class="sep">·</span>
-  <span class="sub">충청북도 청주시 · 온열질환 체감온도</span>
+  <span class="brand"><span id="brand-city">청주</span> <b>폭염 모니터</b></span><span class="sep">·</span>
+  <span class="sub" id="sub-region">충청북도 청주시 · 온열질환 체감온도</span>
   <span class="clock"><span class="dot"></span><span id="updated">불러오는 중…</span></span>
 </div>
 
@@ -198,7 +198,7 @@
   <section class="panel card stack">
     <div class="head"><span class="eyebrow">필요 조치</span><span class="n" id="act-band"></span></div>
     <div id="actions"></div>
-    <div class="srcline">📍 <b>출처: 기상청(청주) 발표 기준값</b> — 옥외작업의 "측정 곤란 시 기상청 발표 체감온도 사용" 근거. 실내·열원 작업장은 현장 실측 필요.</div>
+    <div class="srcline" id="srcline">📍 출처를 불러오는 중…</div>
   </section>
 
   <!-- 오늘 요약 (스탯 4칸) -->
@@ -247,6 +247,11 @@
   </details>
 
   <div class="controls">
+    <label style="font-size:12.5px;color:var(--ink-soft)">사업장</label>
+    <select id="site-sel" style="font:inherit;font-size:12.5px;padding:6px 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--panel);color:var(--ink);font-weight:700">
+      <option value="cj">(주)팜스토리한냉 · 청주</option>
+      <option value="es">(주)팜스토리도드람B&amp;F · 음성</option>
+    </select>
     <button class="primary" id="approval-btn">📄 일일 결재문서</button>
     <button id="refresh">↻ 새로고침</button>
     <button id="export">CSV 내보내기</button>
@@ -268,11 +273,6 @@
 <div class="ov" id="ap-ov"><div class="dlg">
   <div class="bar no-print">
     <h2>일일 결재문서</h2>
-    <label style="font-size:12px;color:var(--ink-soft)">사업장</label>
-    <select id="ap-site" style="font:inherit;font-size:12.5px;padding:5px 9px;border:1px solid var(--line-2);border-radius:8px;background:var(--panel);color:var(--ink)">
-      <option value="(주)팜스토리한냉">(주)팜스토리한냉</option>
-      <option value="(주)팜스토리도드람B&amp;F">(주)팜스토리도드람B&amp;F</option>
-    </select>
     <label style="font-size:12px;color:var(--ink-soft)">대상일</label>
     <input type="date" id="ap-date">
     <button class="primary" id="ap-print">🖨️ 인쇄</button>
@@ -282,10 +282,25 @@
 </div></div>
 
 <script>
-const LAT=36.6424, LON=127.4890, KEY='cheongju-heat-log-v1';
+// 사업장별 관측 기준 (음성에는 종관관측소가 없어 최근접 관측소인 충주를 사용)
+const SITES={
+  cj:{id:'cj', name:'(주)팜스토리한냉',       region:'충청북도 청주시', obs:'청주', stn:131, lat:36.6424, lon:127.4890},
+  es:{id:'es', name:'(주)팜스토리도드람B&F', region:'충청북도 음성군', obs:'충주', stn:127, lat:36.9333, lon:127.6903},
+};
+const SITE_KEY='cheongju-heat-site';
+let SITE=SITES[localStorage.getItem(SITE_KEY)]||SITES.cj;
+const KEY='cheongju-heat-log-v1';
 const q=s=>document.querySelector(s);
-let logs=[];
-async function loadLog(){ try{const r=await fetch('./data/log.json?_='+Date.now()); if(r.ok) logs=await r.json();}catch(e){} renderLog(); }
+let allLogs=[], logs=[];
+function applySite(){
+  logs=allLogs.filter(r=>(r.site||'cj')===SITE.id);
+  q('#brand-city').textContent=SITE.obs==='청주'?'청주':'음성';
+  q('#sub-region').textContent=`${SITE.region} · 온열질환 체감온도`;
+  q('#reading-time').textContent=`${SITE.obs} 실시간 측정`;
+  q('#srcline').innerHTML=`📍 <b>출처: 기상청 ${SITE.obs}관측소(지점 ${SITE.stn}) 발표 기준값</b> — 「산업안전보건기준에 관한 규칙」 제559조에 따라 작업장소 측정이 곤란한 경우 기상청 발표 체감온도 사용. 실내·열원 작업장은 현장 실측 필요.`
+    +(SITE.id==='es'?'<br><span style="color:var(--ink-soft)">※ 음성에는 종관관측소가 없어 최근접 관측소인 충주 기준값을 사용합니다.</span>':'');
+}
+async function loadLog(){ try{const r=await fetch('./data/log.json?_='+Date.now()); if(r.ok) allLogs=await r.json();}catch(e){} applySite(); renderLog(); }
 let logFilter=null; // null=전체, 'YYYY-MM-DD'=해당일만
 
 function wetBulb(Ta,RH){return Ta*Math.atan(0.151977*Math.pow(RH+8.313659,0.5))+Math.atan(Ta+RH)-Math.atan(RH-1.676331)+0.00391838*Math.pow(RH,1.5)*Math.atan(0.023101*RH)-4.686035;}
@@ -343,7 +358,7 @@ function renderLog(){
     let mx=null; byDate[d].forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
     const head=`<tr class="dhead"><td colspan="6">${d} · ${byDate[d].length}회 · 당일 최고 ${mx.pt.toFixed(1)}℃ (${LADDER[bandIdx(mx.pt)].key})</td></tr>`;
     const rows=byDate[d].slice().reverse().map(r=>{const i=bandIdx(r.pt);
-      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td><td>${r.src||'기상청(청주)'}</td></tr>`;}).join('');
+      return `<tr><td class="num">${r.t.slice(11)}</td><td class="num">${r.ta.toFixed(1)}℃</td><td class="num">${Math.round(r.rh)}%</td><td class="num"><b>${r.pt.toFixed(1)}℃</b></td><td><span class="pillc" style="background:${LADDER[i].color}">${LADDER[i].key}</span></td><td>${r.src||"-"}</td></tr>`;}).join('');
     return head+rows;
   }).join('');
   renderToday();
@@ -351,7 +366,7 @@ function renderLog(){
 
 async function fetchNow(){ // 현재값 표시만 (기록은 서버 GitHub Actions가 담당)
   try{
-    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m&timezone=Asia%2FSeoul`);
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${SITE.lat}&longitude=${SITE.lon}&current=temperature_2m,relative_humidity_2m&timezone=Asia%2FSeoul`);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const j=await r.json(); const Ta=j.current.temperature_2m, RH=j.current.relative_humidity_2m, pt=perceived(Ta,RH);
     paint(Ta,RH,pt);
@@ -362,25 +377,26 @@ q('#refresh').addEventListener('click',()=>{fetchNow();loadLog();});
 q('#export').addEventListener('click',()=>{
   if(!logs.length){alert('기록이 없습니다.');return;}
   const head='일시,기온(℃),습도(%),체감온도(℃),단계,출처\n';
-  const body=logs.map(r=>`${r.t},${r.ta.toFixed(1)},${Math.round(r.rh)},${r.pt.toFixed(1)},${LADDER[bandIdx(r.pt)].key},${r.src||'기상청(청주)'}`).join('\n');
+  const body=logs.map(r=>`${r.t},${r.ta.toFixed(1)},${Math.round(r.rh)},${r.pt.toFixed(1)},${LADDER[bandIdx(r.pt)].key},${r.src||"-"}`).join('\n');
   const blob=new Blob(['﻿'+head+body],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='청주_체감온도기록.csv';a.click();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${SITE.obs}_체감온도기록.csv`;a.click();
 });
 
 // 일일 결재문서
 const apOv=q('#ap-ov');
 const SHORT=['평상 관리','냉방·휴식 등 택1 조치','작업단축·2h마다 20분 휴식','14~17시 옥외작업 중지','옥외작업 전면 중지'];
-const SITE_KEY='cheongju-heat-site';
-const siteName=()=>localStorage.getItem(SITE_KEY)||'(주)팜스토리한냉';
-q('#ap-site').value=siteName();
-q('#ap-site').addEventListener('change',e=>{
-  localStorage.setItem(SITE_KEY,e.target.value);
-  renderApproval(q('#ap-date').value||todayKey());
+const siteName=()=>SITE.name;
+q('#site-sel').value=SITE.id;
+q('#site-sel').addEventListener('change',e=>{
+  SITE=SITES[e.target.value]||SITES.cj;
+  localStorage.setItem(SITE_KEY,SITE.id);
+  applySite(); renderLog(); fetchNow();
+  if(apOv.classList.contains('on')) renderApproval(q('#ap-date').value||todayKey());
 });
 function renderApproval(dateStr){
   const day=logs.filter(r=>r.t.slice(0,10)===dateStr); let mx=null; day.forEach(r=>{if(!mx||r.pt>mx.pt)mx=r;});
   const sum=day.length?`당일 최고 체감온도 ${mx.pt.toFixed(1)}℃ · 단계 「${LADDER[bandIdx(mx.pt)].key}」 · 총 ${day.length}회 측정`:'해당일 측정 기록 없음';
-  const srcTxt=day.length?[...new Set(day.map(r=>r.src||'-'))].join(' / '):'기상청(청주)';
+  const srcTxt=day.length?[...new Set(day.map(r=>r.src||'-'))].join(' / '):`기상청 ${SITE.obs}관측소(지점 ${SITE.stn})`;
   const rows=day.length?day.map(r=>{const i=bandIdx(r.pt);
     return `<tr><td>${r.t.slice(11)}</td><td>${r.ta.toFixed(1)}</td><td>${Math.round(r.rh)}</td><td><b>${r.pt.toFixed(1)}</b></td><td>${LADDER[i].key}</td><td>${SHORT[i]}</td></tr>`;}).join('')
     :'<tr><td colspan="6">해당일 기록 없음</td></tr>';

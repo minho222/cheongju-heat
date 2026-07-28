@@ -1,4 +1,4 @@
-name: Collect Cheongju heat log
+name: Collect heat log (Cheongju / Eumseong)
 
 on:
   schedule:
@@ -25,8 +25,13 @@ jobs:
           cat > collect.mjs <<'EOF'
           import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 
-          const LAT = 36.6424, LON = 127.4890;
-          const NX = 69, NY = 106;          // 기상청 격자 (청주)
+          // 사업장별 관측 지점
+          //  - 청주: 종관관측소(ASOS) 청주 131
+          //  - 음성: 음성에는 ASOS가 없어 최근접 종관관측소인 충주 127 사용
+          const SITES = [
+            { id:'cj', obs:'청주', stn:131, lat:36.6424, lon:127.4890, nx:69, ny:106 },
+            { id:'es', obs:'충주', stn:127, lat:36.9333, lon:127.6903, nx:77, ny:114 },
+          ];
           const START_H = 8, END_H = 19;    // 기록 대상 정시 (08~19시)
           const KMA_KEY = process.env.KMA_KEY || '';
 
@@ -36,14 +41,13 @@ jobs:
             const Tw = wb(Ta, RH);
             return Math.round((-0.2442 + 0.55399*Tw + 0.45535*Ta - 0.0022*Tw*Tw + 0.00278*Tw*Ta + 3.0)*10)/10;
           };
-
-          const STN = 131;                  // 기상청 청주 관측소 지점번호
           const ok = (ta, rh) => (Number.isFinite(ta) && Number.isFinite(rh) && ta > -50 && ta < 60 && rh > 0 && rh <= 100);
+          const isKma = s => /^기상청 (종관기상관측|초단기실황)/.test(String(s));
 
-          // ① 기상청 API허브 - 종관기상관측(ASOS) 시간자료 : 청주 관측소 실측값
-          async function kmaAsos(ymd, hh) {
+          // ① 기상청 API허브 - 종관기상관측(ASOS) 시간자료 : 관측소 실측값
+          async function kmaAsos(site, ymd, hh) {
             const u = 'https://apihub.kma.go.kr/api/typ01/url/kma_sfctm2.php'
-              + `?tm=${ymd}${hh}00&stn=${STN}&help=0&authKey=${KMA_KEY}`;
+              + `?tm=${ymd}${hh}00&stn=${site.stn}&help=0&authKey=${KMA_KEY}`;
             try {
               const txt = await (await fetch(u)).text();
               if (txt.includes('"status"')) return null;               // 403 등 JSON 오류 응답
@@ -51,36 +55,42 @@ jobs:
               if (!line) return null;
               const f = line.trim().split(/\s+/);
               const ta = parseFloat(f[11]), rh = parseFloat(f[13]);    // TA=기온, HM=상대습도
-              return ok(ta, rh) ? { ta, rh, src: `기상청 종관기상관측(ASOS) 청주관측소(지점 ${STN})` } : null;
+              return ok(ta, rh)
+                ? { ta, rh, src: `기상청 종관기상관측(ASOS) ${site.obs}관측소(지점 ${site.stn})` }
+                : null;
             } catch { return null; }
           }
 
           // ② 기상청 API허브 - 초단기실황(동네예보 격자)
-          async function kmaNcst(ymd, hh) {
+          async function kmaNcst(site, ymd, hh) {
             const u = 'https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getUltraSrtNcst'
               + `?pageNo=1&numOfRows=100&dataType=JSON&base_date=${ymd}&base_time=${hh}00`
-              + `&nx=${NX}&ny=${NY}&authKey=${KMA_KEY}`;
+              + `&nx=${site.nx}&ny=${site.ny}&authKey=${KMA_KEY}`;
             try {
               const j = await (await fetch(u)).json();
               const items = j?.response?.body?.items?.item;
               if (!Array.isArray(items)) return null;
               const pick = c => { const v = items.find(x => x.category === c); return v ? Number(v.obsrValue) : null; };
               const ta = pick('T1H'), rh = pick('REH');
-              return ok(ta, rh) ? { ta, rh, src: '기상청 초단기실황(청주)' } : null;
+              return ok(ta, rh) ? { ta, rh, src: `기상청 초단기실황(${site.obs})` } : null;
             } catch { return null; }
           }
 
-          async function kma(ymd, hh) {
+          async function kma(site, ymd, hh) {
             if (!KMA_KEY) return null;
-            return (await kmaAsos(ymd, hh)) || (await kmaNcst(ymd, hh));
+            return (await kmaAsos(site, ymd, hh)) || (await kmaNcst(site, ymd, hh));
           }
 
-          // 폴백: Open-Meteo 시간별 (기상청 키가 없거나 조회 실패한 시간대만)
-          const om = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`
-            + '&hourly=temperature_2m,relative_humidity_2m&past_days=2&forecast_days=1&timezone=Asia%2FSeoul'
-          ).then(r => r.json()).catch(() => null);
-          const omAt = (dash, hh) => {
+          // 폴백: Open-Meteo 시간별 (기상청 조회가 실패한 시간대만)
+          async function loadOm(site) {
+            try {
+              return await fetch(
+                `https://api.open-meteo.com/v1/forecast?latitude=${site.lat}&longitude=${site.lon}`
+                + '&hourly=temperature_2m,relative_humidity_2m&past_days=2&forecast_days=1&timezone=Asia%2FSeoul'
+              ).then(r => r.json());
+            } catch { return null; }
+          }
+          const omAt = (om, dash, hh) => {
             if (!om?.hourly?.time) return null;
             const i = om.hourly.time.indexOf(`${dash}T${hh}:00`);
             if (i < 0) return null;
@@ -91,61 +101,71 @@ jobs:
           if (!existsSync('data')) mkdirSync('data');
           let logs = [];
           try { logs = JSON.parse(readFileSync('data/log.json','utf8')); } catch {}
-          const have = new Set(logs.map(r => r.t.slice(0,13)));   // 'YYYY-MM-DD HH'
+          logs.forEach(r => { if (!r.site) r.site = 'cj'; });          // 기존 기록은 청주분
 
-          const nowKst = new Date(Date.now() + 9*3600*1000);      // 러너는 UTC
+          const nowKst = new Date(Date.now() + 9*3600*1000);           // 러너는 UTC
           const p = n => String(n).padStart(2,'0');
+          const key = (site, dash, h) => `${site}|${dash} ${p(h)}`;
+          const have = new Set(logs.map(r => key(r.site, r.t.slice(0,10), +r.t.slice(11,13))));
 
-          // 최근 3일 × 근무시간 정시 중 비어 있는 시간대를 모두 채움 (스케줄이 밀려도 빈칸이 남지 않음)
-          const targets = [];
-          for (let d = 2; d >= 0; d--) {
-            const day = new Date(nowKst.getTime() - d*86400*1000);
-            const ymd = `${day.getUTCFullYear()}${p(day.getUTCMonth()+1)}${p(day.getUTCDate())}`;
-            const dash = `${day.getUTCFullYear()}-${p(day.getUTCMonth()+1)}-${p(day.getUTCDate())}`;
-            for (let h = START_H; h <= END_H; h++) {
-              if (have.has(`${dash} ${p(h)}`)) continue;
-              if (d === 0 && h > nowKst.getUTCHours()) continue;   // 미래 시각 제외
-              targets.push({ ymd, dash, h });
+          let added = 0, byKma = 0, fixed = 0;
+
+          for (const site of SITES) {
+            // 최근 3일 × 08~19시 중 비어 있는 시간대를 모두 채움 (스케줄이 밀려도 빈칸이 남지 않음)
+            const targets = [];
+            for (let d = 2; d >= 0; d--) {
+              const day = new Date(nowKst.getTime() - d*86400*1000);
+              const ymd = `${day.getUTCFullYear()}${p(day.getUTCMonth()+1)}${p(day.getUTCDate())}`;
+              const dash = `${day.getUTCFullYear()}-${p(day.getUTCMonth()+1)}-${p(day.getUTCDate())}`;
+              for (let h = START_H; h <= END_H; h++) {
+                if (have.has(key(site.id, dash, h))) continue;
+                if (d === 0 && h > nowKst.getUTCHours()) continue;     // 미래 시각 제외
+                targets.push({ ymd, dash, h });
+              }
             }
-          }
 
-          let added = 0, byKma = 0;
-          for (const t of targets) {
-            let v = await kma(t.ymd, p(t.h));
-            let src;
-            if (v) { src = v.src; byKma++; }
-            else { v = omAt(t.dash, p(t.h)); src = 'Open-Meteo 재분석자료(청주) ※기상청 자료 아님'; }
-            if (!v) continue;
-            const isoMs = Date.UTC(+t.dash.slice(0,4), +t.dash.slice(5,7)-1, +t.dash.slice(8,10), t.h) - 9*3600*1000;
-            logs.push({
-              iso: new Date(isoMs).toISOString(),
-              t: `${t.dash} ${p(t.h)}:00`,
-              ta: v.ta, rh: v.rh, pt: perceived(v.ta, v.rh), src
-            });
-            have.add(`${t.dash} ${p(t.h)}`);
-            added++;
-          }
+            let om = null;
+            for (const t of targets) {
+              let v = await kma(site, t.ymd, p(t.h)), src;
+              if (v) { src = v.src; byKma++; }
+              else {
+                if (!om) om = await loadOm(site);
+                v = omAt(om, t.dash, p(t.h));
+                src = `Open-Meteo 재분석자료(${site.obs}) ※기상청 자료 아님`;
+              }
+              if (!v) continue;
+              const isoMs = Date.UTC(+t.dash.slice(0,4), +t.dash.slice(5,7)-1, +t.dash.slice(8,10), t.h) - 9*3600*1000;
+              logs.push({
+                iso: new Date(isoMs).toISOString(),
+                t: `${t.dash} ${p(t.h)}:00`,
+                site: site.id, stn: site.stn,
+                ta: v.ta, rh: v.rh, pt: perceived(v.ta, v.rh), src
+              });
+              have.add(key(site.id, t.dash, t.h));
+              added++;
+            }
 
-          // 기상청 키가 등록되면, 폴백으로 남아 있던 최근 기록을 기상청 관측값으로 교체
-          let fixed = 0;
-          if (KMA_KEY) {
-            for (const r of logs.slice(-48)) {
-              if (/^기상청 (종관기상관측|초단기실황)/.test(String(r.src))) continue;   // 초기 '기상청(청주)' 표기는 실제 폴백값이므로 교체 대상
-              const dash = r.t.slice(0,10), hh = r.t.slice(11,13);
-              const v = await kma(dash.replace(/-/g,''), hh);
-              if (!v) continue;                       // 조회 가능 기간이 지난 건 그대로 둠
-              r.ta = v.ta; r.rh = v.rh; r.pt = perceived(v.ta, v.rh);
-              r.t = `${dash} ${hh}:00`; r.src = v.src;
-              fixed++;
+            // 폴백으로 남아 있던 최근 기록을 기상청 관측값으로 교체
+            if (KMA_KEY) {
+              for (const r of logs.filter(x => x.site === site.id).slice(-48)) {
+                if (isKma(r.src)) continue;
+                const dash = r.t.slice(0,10), hh = r.t.slice(11,13);
+                const v = await kma(site, dash.replace(/-/g,''), hh);
+                if (!v) continue;                                     // 조회 가능 기간이 지난 건 그대로 둠
+                r.ta = v.ta; r.rh = v.rh; r.pt = perceived(v.ta, v.rh);
+                r.t = `${dash} ${hh}:00`; r.src = v.src; r.stn = site.stn;
+                fixed++;
+              }
             }
           }
 
           if (!added && !fixed) { console.log('추가·교체할 항목 없음'); process.exit(0); }
 
-          logs.sort((a,b) => a.t.localeCompare(b.t));
-          if (logs.length > 20000) logs = logs.slice(-20000);
+          logs.sort((a,b) => (a.t.localeCompare(b.t)) || a.site.localeCompare(b.site));
+          if (logs.length > 40000) logs = logs.slice(-40000);
           writeFileSync('data/log.json', JSON.stringify(logs));
-          console.log(`신규 ${added}건 (기상청 ${byKma} / 폴백 ${added-byKma}) · 기상청 값으로 교체 ${fixed}건 · 총 ${logs.length}건`);
+          const cnt = id => logs.filter(r => r.site === id).length;
+          console.log(`신규 ${added}건 (기상청 ${byKma}) · 교체 ${fixed}건 · 총 ${logs.length}건 [청주 ${cnt('cj')} / 음성 ${cnt('es')}]`);
           EOF
           node collect.mjs
 
